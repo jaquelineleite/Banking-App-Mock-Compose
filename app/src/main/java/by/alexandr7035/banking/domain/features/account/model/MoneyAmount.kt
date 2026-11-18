@@ -6,6 +6,8 @@ data class MoneyAmount(
     val value: Float,
     val currency: BalanceCurrency = BalanceCurrency.USD,
 ) {
+    internal fun isPositiveFinite(): Boolean = value.isFinite() && value > 0f
+
     operator fun plus(other: MoneyAmount): MoneyAmount {
         return this.copy(value = this.value + other.value)
     }
