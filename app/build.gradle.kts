@@ -1,4 +1,3 @@
-import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
@@ -11,20 +10,27 @@ plugins {
 }
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties().apply {
-    load(FileInputStream(keystorePropertiesFile))
+val keystoreProperties = keystorePropertiesFile.takeIf { it.isFile }?.let { propertiesFile ->
+    Properties().apply {
+        propertiesFile.inputStream().use { load(it) }
+        val requiredKeys = listOf("keyAlias", "keyPassword", "storeFile", "storePassword")
+        val missingKeys = requiredKeys.filter { getProperty(it).isNullOrBlank() }
+        if (missingKeys.isNotEmpty()) {
+            throw GradleException("Propriedades de assinatura ausentes: ${missingKeys.joinToString()}")
+        }
+    }
 }
 
 android {
     namespace = "by.alexandr7035.banking"
     compileSdk = 35
 
-    signingConfigs {
-        create("config") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+    keystoreProperties?.let { properties ->
+        signingConfigs.create("config") {
+            keyAlias = properties.getProperty("keyAlias")
+            keyPassword = properties.getProperty("keyPassword")
+            storeFile = properties.getProperty("storeFile")?.let { file(it) }
+            storePassword = properties.getProperty("storePassword")
         }
     }
 
@@ -41,7 +47,7 @@ android {
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("config")
+            signingConfigs.findByName("config")?.let { signingConfig = it }
             isMinifyEnabled = true
             proguardFiles(
                     getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -49,7 +55,7 @@ android {
             )
         }
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("config")
+            signingConfigs.findByName("config")?.let { signingConfig = it }
             applicationIdSuffix = ".debug"
             isDebuggable = true
             versionNameSuffix = ".debug"
@@ -71,6 +77,16 @@ android {
     packaging {
         resources.excludes.add("/META-INF/{AL2.0,LGPL2.1}")
     }
+}
+
+if (keystoreProperties == null) {
+    val requireReleaseSigning = tasks.register("requireReleaseSigning") {
+        doFirst {
+            throw GradleException("Configure keystore.properties para gerar um APK ou AAB release.")
+        }
+    }
+    tasks.matching { it.name in setOf("packageRelease", "packageReleaseBundle") }
+        .configureEach { dependsOn(requireReleaseSigning) }
 }
 
 dependencies {
