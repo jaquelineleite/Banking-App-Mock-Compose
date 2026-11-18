@@ -18,3 +18,17 @@ gradle.properties
 .externalNativeBuild
 .cxx
 local.properties
+
+# Python e pytest
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.pytest_cache
+
+# Relatorios de testes gerados
+qa_mobile/reports/
+
+# Arquivos temporarios de depuracao
+*.hprof
+dashboard.xml
