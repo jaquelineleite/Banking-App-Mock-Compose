@@ -10,6 +10,8 @@ import by.alexandr7035.banking.data.db.CacheDatabase
 import by.alexandr7035.banking.data.db.convertors.MoneyAmountConvertor
 import by.alexandr7035.banking.data.transactions.TransactionSource
 import by.alexandr7035.banking.data.transactions.db.TransactionEntity
+import by.alexandr7035.banking.domain.core.AppError
+import by.alexandr7035.banking.domain.core.ErrorType
 import by.alexandr7035.banking.domain.features.account.model.MoneyAmount
 import by.alexandr7035.banking.domain.features.cards.model.CardType
 import by.alexandr7035.banking.domain.features.transactions.model.TransactionStatus
@@ -86,6 +88,62 @@ class BankingCacheIntegrationTest {
         withTimeout(5_000) {
             assertEquals(MoneyAmount(40f), repository.getBalanceFlow().first())
             assertEquals(MoneyAmount(14.5f), repository.getCardBalanceFlow("cartao-b").first())
+        }
+    }
+
+    @Test
+    fun envioAcimaDoSaldoPreservaCartao() = runBlocking {
+        val cardsDao = db.getCardsDao()
+        val source = card("origem", 25f)
+        cardsDao.addCard(source)
+        val repository = AccountRepositoryMock(Dispatchers.IO, cardsDao)
+
+        val error = runCatching { repository.sendFromCard(source.number, MoneyAmount(25.5f), 1L) }
+
+        assertEquals(AppError(ErrorType.INSUFFICIENT_CARD_BALANCE), error.exceptionOrNull())
+        assertEquals(source, cardsDao.getCardByNumber(source.number))
+    }
+
+    @Test
+    fun envioComCartaoRemovidoPreservaOutrosCartoes() = runBlocking {
+        val cardsDao = db.getCardsDao()
+        val source = card("origem", 25f)
+        val other = card("outro", 10f)
+        cardsDao.addCard(source)
+        cardsDao.addCard(other)
+        cardsDao.deleteCard(source)
+        val repository = AccountRepositoryMock(Dispatchers.IO, cardsDao)
+
+        val error = runCatching { repository.sendFromCard(source.number, MoneyAmount(5f), 1L) }
+
+        assertEquals(AppError(ErrorType.CARD_NOT_FOUND), error.exceptionOrNull())
+        assertEquals(listOf(other), cardsDao.getCards())
+    }
+
+    @Test
+    fun envioNoValorExatoDoSaldoZeraCartaoDeOrigem() = runBlocking {
+        val cardsDao = db.getCardsDao()
+        val source = card("origem", 25.5f)
+        cardsDao.addCard(source)
+        val repository = AccountRepositoryMock(Dispatchers.IO, cardsDao)
+
+        repository.sendFromCard(source.number, MoneyAmount(25.5f), 1L)
+
+        assertEquals(source.copy(recentBalance = 0f), cardsDao.getCardByNumber(source.number))
+    }
+
+    @Test
+    fun envioComValorNaoPositivoOuNaoFinitoPreservaCartao() = runBlocking {
+        val cardsDao = db.getCardsDao()
+        val source = card("origem", 25f)
+        cardsDao.addCard(source)
+        val repository = AccountRepositoryMock(Dispatchers.IO, cardsDao)
+
+        for (amount in listOf(0f, -1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+            val error = runCatching { repository.sendFromCard(source.number, MoneyAmount(amount), 1L) }
+
+            assertEquals("Valor: $amount", AppError(ErrorType.GENERIC_VALIDATION_ERROR), error.exceptionOrNull())
+            assertEquals("Valor: $amount", source, cardsDao.getCardByNumber(source.number))
         }
     }
 

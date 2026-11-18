@@ -52,6 +52,8 @@ class AccountRepositoryMock(
     }
 
     override suspend fun sendFromCard(cardId: String, amount: MoneyAmount, contactId: Long) {
+        if (!amount.isPositiveFinite()) throw AppError(ErrorType.GENERIC_VALIDATION_ERROR)
+
         val cardEntity = cardsDao.getCardByNumber(cardId) ?: throw AppError(ErrorType.CARD_NOT_FOUND)
         if (cardEntity.recentBalance < amount.value) throw AppError(ErrorType.INSUFFICIENT_CARD_BALANCE)
         val updated = cardEntity.copy(recentBalance = cardEntity.recentBalance - amount.value)
