@@ -18,6 +18,11 @@
    * [App layers](#app-layers)
    * [Feature details](#feature-details)
 * [Used materials](#used-materials)
+* [Quality Engineering](#quality-engineering)
+
+## Quality Engineering
+
+[Auditoria e estratégia](docs/qa/estrategia.md) · [Matriz de rastreabilidade](docs/qa/matriz.md) · [Execução mobile no Windows](qa_mobile/README.md)
 
 # About the app
 <details>
