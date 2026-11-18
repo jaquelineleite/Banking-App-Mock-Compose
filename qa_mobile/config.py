@@ -19,3 +19,14 @@ def session_config(env: Mapping[str, str]) -> tuple[str, UiAutomator2Options]:
     options.app_package = app_package
     options.no_reset = True
     return server_url, options
+
+def ui_wait_seconds(env: Mapping[str, str]) -> int:
+    setting = "BANKING_UI_WAIT_SECONDS"
+    try:
+        seconds = int(env.get(setting, "20"))
+    except ValueError as error:
+        raise ValueError(f"{setting} deve ser um inteiro positivo.") from error
+
+    if seconds <= 0:
+        raise ValueError(f"{setting} deve ser um inteiro positivo.")
+    return seconds
