@@ -1,4 +1,5 @@
 from appium.webdriver.common.appiumby import AppiumBy
+from selenium.webdriver.support import expected_conditions as conditions
 from selenium.webdriver.support.ui import WebDriverWait
 
 
@@ -8,21 +9,23 @@ class DashboardPage:
 
     def __init__(self, driver):
         self.driver = driver
+        self.wait = WebDriverWait(driver, 20)
 
     def abrir_home(self):
-        self.driver.find_element(
-            AppiumBy.ANDROID_UIAUTOMATOR, self.HOME
+        self.wait.until(
+            conditions.element_to_be_clickable((AppiumBy.ANDROID_UIAUTOMATOR, self.HOME))
         ).click()
         return self
 
     def validar_saldo_visivel(self):
-        WebDriverWait(self.driver, 20).until(
-            lambda d: "My Balance" in d.page_source
+        self.wait.until(
+            lambda driver: "My Balance" in driver.page_source,
+            message="O rótulo My Balance não apareceu no Dashboard.",
         )
         return self
 
     def abrir_historico(self):
-        self.driver.find_element(
-            AppiumBy.ANDROID_UIAUTOMATOR, self.HISTORY
+        self.wait.until(
+            conditions.element_to_be_clickable((AppiumBy.ANDROID_UIAUTOMATOR, self.HISTORY))
         ).click()
         return self
