@@ -76,5 +76,12 @@ as chamadas HTTP e devolve a resposta para as asserções dos testes.
 
 Validação do PR #8 em 19/11/2026: 27 testes da API aprovados em Python
 3.12, sendo 17 existentes, 9 de contrato e 1 jornada BDD. Os resultados
-foram obtidos em execução local. O repositório ainda aguarda o workflow
-de API no GitHub Actions.
+foram obtidos em execução local.
+
+## GitHub Actions
+
+O workflow **Testes da API bancária** executa a suíte da API nos pull requests
+destinados à `master`, incluindo os testes de contrato e a jornada BDD.
+O check **pytest da API** mostra o resultado do pytest. O artefato
+`banking-api-junit` contém o XML JUnit, publicado mesmo quando algum teste
+falha, desde que o pytest gere o relatório.
