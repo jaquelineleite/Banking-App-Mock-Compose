@@ -1,9 +1,8 @@
-from fastapi.testclient import TestClient
-from httpx2 import Response
+from httpx2 import Client, Response
 
 
 class BankingApiClient:
-    def __init__(self, client: TestClient):
+    def __init__(self, client: Client):
         self.client = client
 
     def listar_contas(self, token: str | None) -> Response:

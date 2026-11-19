@@ -85,3 +85,29 @@ destinados à `master`, incluindo os testes de contrato e a jornada BDD.
 O check **pytest da API** mostra o resultado do pytest. O artefato
 `banking-api-junit` contém o XML JUnit, publicado mesmo quando algum teste
 falha, desde que o pytest gere o relatório.
+
+## Limites e timeout HTTP
+
+Os cenários parametrizados cobrem campos ausentes, extras e tipos inválidos.
+A cada rejeição, o teste consulta as duas contas antes e depois e verifica
+que os saldos foram preservados. A matriz de valores distingue o limite
+da conta do limite do contrato. Com o saldo inicial de 10.000 centavos,
+1 centavo e o saldo exato são aceitos. O teto contratual de 1.000.000.000
+centavos chega à regra de saldo e recebe `409`. Um centavo acima do teto
+recebe `422`.
+
+O cenário de timeout usa uma conexão HTTP local em porta dinâmica. O
+servidor de teste recebe a requisição e retém a resposta para provocar um
+timeout de leitura no cliente HTTP. A única conclusão é que o cliente
+ficou sem resposta no prazo. O resultado financeiro de uma transferência
+real permanece desconhecido nessa situação. Retry seguro será coberto
+na etapa de idempotência.
+
+Na raiz do projeto, execute:
+
+```powershell
+python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
+```
+
+Validação local em 19/11/2026: **44 testes aprovados**, incluindo 17 casos
+novos. O mesmo comando roda no GitHub Actions com publicação do JUnit.
