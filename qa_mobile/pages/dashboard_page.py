@@ -7,9 +7,9 @@ class DashboardPage:
     HOME = 'new UiSelector().text("Home")'
     HISTORY = 'new UiSelector().text("History")'
 
-    def __init__(self, driver):
+    def __init__(self, driver, timeout):
         self.driver = driver
-        self.wait = WebDriverWait(driver, 20)
+        self.wait = WebDriverWait(driver, timeout)
 
     def abrir_home(self):
         self.wait.until(
