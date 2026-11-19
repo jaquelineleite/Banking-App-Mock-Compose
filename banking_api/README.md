@@ -57,3 +57,24 @@ Em 19/11/2026, os 17 testes da API passaram em um ambiente Python 3.12
 criado do zero. Os 8 testes unitários da base Appium também passaram.
 Um smoke HTTP com Uvicorn confirmou a consulta autenticada, a
 transferência de 250 centavos e os saldos finais de 9.750 e 5.250 centavos.
+
+## Contrato e jornada de transferência
+
+Na raiz do projeto, rode `python -m pytest banking_api/tests -q` no
+ambiente preparado acima. O Service Object `BankingApiClient` centraliza
+as chamadas HTTP e devolve a resposta para as asserções dos testes.
+
+- `test_openapi_contract.py` valida status, tipo de conteúdo e respostas
+  JSON contra os esquemas publicados em `/openapi.json`. As expectativas
+  de negócio e de status também ficam explícitas nos testes.
+- `features/transferencia.feature` descreve em Gherkin a transferência
+  de R$ 2,50 e verifica comprovante, débito, crédito e preservação do saldo
+  total. Para executar só a jornada, rode
+  `python -m pytest banking_api/tests/test_transferencia_bdd.py -v`.
+- Cada caso usa sua própria instância da API. A execução passa pelo
+  `TestClient` do FastAPI dentro do processo de testes.
+
+Validação do PR #8 em 19/11/2026: 27 testes da API aprovados em Python
+3.12, sendo 17 existentes, 9 de contrato e 1 jornada BDD. Os resultados
+foram obtidos em execução local. O repositório ainda aguarda o workflow
+de API no GitHub Actions.

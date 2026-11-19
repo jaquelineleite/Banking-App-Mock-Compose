@@ -1,5 +1,4 @@
 import pytest
-from fastapi.testclient import TestClient
 
 from banking_api.main import create_app
 
@@ -11,14 +10,6 @@ ENV_B = "BANKING_LAB_TOKEN_B"
 AUTH_A = {"Authorization": f"Bearer {TOKEN_A}"}
 AUTH_B = {"Authorization": f"Bearer {TOKEN_B}"}
 ENVIO = {"origem": "conta-a", "destino": "conta-b", "valor_centavos": 250}
-
-
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setenv(ENV_A, TOKEN_A)
-    monkeypatch.setenv(ENV_B, TOKEN_B)
-    with TestClient(create_app()) as client:
-        yield client
 
 
 def saldos(client):
