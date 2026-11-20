@@ -72,7 +72,7 @@ def test_openapi_documenta_seguranca_limites_e_respostas(client):
     assert contrato["components"]["securitySchemes"]["HTTPBearer"]["scheme"] == "bearer"
     post = contrato["paths"]["/transferencias"]["post"]
     assert post["security"] == [{"HTTPBearer": []}]
-    assert set(post["responses"]) == {"201", "401", "404", "409", "422"}
+    assert set(post["responses"]) == {"201", "401", "404", "409", "422", "503"}
     valor = contrato["components"]["schemas"]["SolicitacaoTransferencia"]["properties"]["valor_centavos"]
     assert (valor["type"], valor["minimum"], valor["maximum"]) == ("integer", 1, 1_000_000_000)
 

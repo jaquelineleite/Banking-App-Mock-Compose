@@ -1,13 +1,17 @@
 import os
 import re
 from hmac import compare_digest
-from threading import Lock
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException
+import psycopg
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
+
+
+from banking_api.database import ContaNaoEncontrada, PostgreSQLBank, SaldoInsuficiente, database_url
 
 
 class Conta(BaseModel):
@@ -37,6 +41,7 @@ class Erro(BaseModel):
 
 
 NAO_AUTENTICADO = {401: {"model": Erro, "description": "Token ausente ou inválido"}}
+BANCO_INDISPONIVEL = {503: {"model": Erro, "description": "Falha no armazenamento"}}
 CONTA_INDISPONIVEL = {404: {"model": Erro, "description": "Conta não encontrada"}}
 
 
@@ -52,8 +57,15 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="API bancária de laboratório", version="0.1.0")
     bearer = HTTPBearer(auto_error=False)
-    saldos = {"conta-a": 10_000, "conta-b": 5_000}
-    lock = Lock()
+    banco = PostgreSQLBank(database_url())
+
+    @app.exception_handler(psycopg.Error)
+    async def falha_no_banco(request: Request, error: psycopg.Error) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": "armazenamento_indisponivel"})
+
+    @app.exception_handler(ContaNaoEncontrada)
+    async def conta_nao_encontrada(request: Request, error: ContaNaoEncontrada) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": "conta_nao_encontrada"})
 
     def conta_autenticada(
         credencial: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
@@ -67,14 +79,16 @@ def create_app() -> FastAPI:
             raise HTTPException(401, "token_invalido", headers={"WWW-Authenticate": "Bearer"})
         return contas[0]
 
-    @app.get("/contas", responses=NAO_AUTENTICADO, summary="Listar contas próprias")
+    @app.get("/contas", responses=NAO_AUTENTICADO | BANCO_INDISPONIVEL, summary="Listar contas próprias")
     def listar_contas(conta: Annotated[str, Depends(conta_autenticada)]) -> list[Conta]:
-        with lock:
-            return [Conta(id=conta, saldo_centavos=saldos[conta])]
+        try:
+            return [Conta(id=conta, saldo_centavos=banco.saldo(conta))]
+        except ContaNaoEncontrada:
+            return []
 
     @app.get(
         "/contas/{conta_id}",
-        responses=NAO_AUTENTICADO | CONTA_INDISPONIVEL,
+        responses=NAO_AUTENTICADO | CONTA_INDISPONIVEL | BANCO_INDISPONIVEL,
         summary="Consultar conta própria",
     )
     def consultar_conta(
@@ -82,13 +96,12 @@ def create_app() -> FastAPI:
     ) -> Conta:
         if conta_id != conta:
             raise HTTPException(404, "conta_nao_encontrada")
-        with lock:
-            return Conta(id=conta_id, saldo_centavos=saldos[conta_id])
+        return Conta(id=conta_id, saldo_centavos=banco.saldo(conta_id))
 
     @app.post(
         "/transferencias",
         status_code=201,
-        responses=NAO_AUTENTICADO | CONTA_INDISPONIVEL | {
+        responses=NAO_AUTENTICADO | CONTA_INDISPONIVEL | BANCO_INDISPONIVEL | {
             409: {"model": Erro, "description": "Saldo insuficiente ou mesma conta"}
         },
         summary="Transferir saldo entre contas de laboratório",
@@ -98,19 +111,18 @@ def create_app() -> FastAPI:
         conta: Annotated[str, Depends(conta_autenticada)],
     ) -> Transferencia:
         origem, destino, valor = solicitacao.origem, solicitacao.destino, solicitacao.valor_centavos
-        if origem != conta or destino not in saldos:
+        if origem != conta:
             raise HTTPException(404, "conta_nao_encontrada")
         if origem == destino:
             raise HTTPException(409, "mesma_conta")
 
-        with lock:
-            if valor > saldos[origem]:
-                raise HTTPException(409, "saldo_insuficiente")
-            transferencia = Transferencia(
-                id=uuid4(), origem=origem, destino=destino, valor_centavos=valor
-            )
-            saldos[origem] -= valor
-            saldos[destino] += valor
+        transferencia = Transferencia(
+            id=uuid4(), origem=origem, destino=destino, valor_centavos=valor
+        )
+        try:
+            banco.transferir(transferencia.id, origem, destino, valor)
+        except SaldoInsuficiente as error:
+            raise HTTPException(409, "saldo_insuficiente") from error
         return transferencia
 
     return app

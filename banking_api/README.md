@@ -1,24 +1,32 @@
 # API bancária de laboratório
 
 Serviço FastAPI para exercitar testes de API com duas contas fictícias.
-Cada instância começa com `conta-a` em R$ 100,00 e `conta-b` em R$ 50,00.
-Os valores trafegam em **centavos inteiros de BRL**. Execute com um único
-processo. Reiniciar o serviço restaura os saldos iniciais.
+A primeira migração cadastra `conta-a` em R$ 100,00 e `conta-b` em R$ 50,00.
+Os valores trafegam em **centavos inteiros de BRL**. O PostgreSQL preserva
+saldos e comprovantes quando o serviço reinicia.
 
 ## Rodar no Windows
 
-Na raiz do projeto, com Python 3.12 e PowerShell:
+Na raiz do projeto, com Python 3.12, Docker e PowerShell:
 
 ```powershell
 py -3.12 -m venv .venv
 $python = ".\.venv\Scripts\python.exe"
 & $python -m pip install -r banking_api/requirements-test.txt
+docker run --name banking-lab-pg -d -p 127.0.0.1:5432:5432 -e POSTGRES_USER=banking -e POSTGRES_PASSWORD=banking-local -e POSTGRES_DB=banking postgres:16
+docker exec banking-lab-pg pg_isready -U banking -d banking
+$env:BANKING_DATABASE_URL = "postgresql://banking:banking-local@127.0.0.1:5432/banking"
+$env:BANKING_TEST_DATABASE_URL = $env:BANKING_DATABASE_URL
+& $python -m banking_api.database
 & $python -m pytest banking_api/tests -q
 
 $env:BANKING_LAB_TOKEN_A = & $python -c "import secrets; print(secrets.token_urlsafe(32))"
 $env:BANKING_LAB_TOKEN_B = & $python -c "import secrets; print(secrets.token_urlsafe(32))"
 & $python -m uvicorn banking_api.main:create_app --factory --host 127.0.0.1 --port 8000
 ```
+
+Aguarde o `pg_isready` indicar que o banco aceita conexões antes de
+rodar a migração. As credenciais acima são apenas para o laboratório local.
 
 A página [Swagger UI](http://127.0.0.1:8000/docs) permite autorizar com o
 token de uma conta e experimentar as rotas. O [OpenAPI em JSON](http://127.0.0.1:8000/openapi.json)
@@ -41,14 +49,17 @@ Exemplo de corpo de transferência com o token da conta A:
 - `409` para saldo insuficiente ou origem igual ao destino.
 - `422` para corpo inválido, incluindo valores decimais, zero, negativos
   ou superiores a 1.000.000.000 centavos.
+- `503` para falha de armazenamento.
 
 Os tokens são de laboratório, distintos, vinculados a uma conta e fornecidos
 por variáveis de ambiente. Use somente dados fictícios e mantenha o serviço
-em localhost. O saldo é compartilhado dentro de um processo e o débito e
-o crédito ocorrem sob o mesmo bloqueio. Persistência, idempotência,
-integração Android e testes de concorrência fazem parte das etapas seguintes.
+em localhost. O débito, o crédito e o comprovante são gravados na mesma
+transação do PostgreSQL, com bloqueio das duas contas na ordem do ID.
+Idempotência, integração Android e testes de concorrência ficam para
+as etapas seguintes.
 
-Os testes criam uma instância por caso e verificam autorização, contrato,
+Os testes de API isolam os dados em um esquema PostgreSQL por caso, com
+remoção ao final. Eles verificam autorização, contrato,
 débito/crédito e preservação de ambos os saldos em rejeições.
 
 ## Evidências
@@ -80,8 +91,8 @@ foram obtidos em execução local.
 
 ## GitHub Actions
 
-O workflow **Testes da API bancária** executa a suíte da API nos pull requests
-destinados à `master`, incluindo os testes de contrato e a jornada BDD.
+O workflow **Testes da API bancária** inicia um PostgreSQL 16 dedicado
+e executa a suíte nos pull requests destinados à `master`.
 O check **pytest da API** mostra o resultado do pytest. O artefato
 `banking-api-junit` contém o XML JUnit, publicado mesmo quando algum teste
 falha, desde que o pytest gere o relatório.
@@ -111,3 +122,25 @@ python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
 
 Validação local em 19/11/2026: **44 testes aprovados**, incluindo 17 casos
 novos. O mesmo comando roda no GitHub Actions com publicação do JUnit.
+
+
+## Integridade financeira no PostgreSQL
+
+A migração versionada cria as tabelas e as restrições de integridade.
+Reexecutá-la preserva os saldos e os comprovantes já gravados.
+
+Os cenários em `features/integridade_financeira.feature` consultam o banco
+diretamente para confirmar transferência concluída, saldo insuficiente e
+rollback. No rollback, um gatilho exclusivo do esquema de teste verifica
+que o débito já ocorreu e interrompe o crédito. Uma sequência registra
+que a falha foi provocada nesse ponto, mesmo após o rollback. O teste
+então confirma os dois saldos originais e a ausência de comprovantes.
+
+Para rodar apenas esse BDD:
+
+```powershell
+& $python -m pytest banking_api/tests/test_integridade_postgres_bdd.py -v
+```
+
+Em 20/11/2026, 54 testes da API passaram localmente com PostgreSQL 18.7,
+incluindo os três cenários BDD e cinco verificações de migração e esquema.
