@@ -22,7 +22,7 @@
 
 ## Quality Engineering
 
-[Auditoria e estratégia](docs/qa/estrategia.md) · [Matriz de rastreabilidade](docs/qa/matriz.md) · [Execução mobile no Windows](qa_mobile/README.md) · [API bancária de laboratório](banking_api/README.md)
+[Auditoria e estratégia](docs/qa/estrategia.md) · [Matriz de rastreabilidade](docs/qa/matriz.md) · [Execução mobile no Windows](qa_mobile/README.md) · [API bancária de laboratório](banking_api/README.md) · [OWASP e acessibilidade](docs/qa/owasp-e-wcag.md)
 
 # About the app
 <details>
