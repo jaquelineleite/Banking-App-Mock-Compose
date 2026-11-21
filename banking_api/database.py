@@ -13,6 +13,14 @@ class SaldoInsuficiente(Exception):
     pass
 
 
+class MesmaConta(Exception):
+    pass
+
+
+class ChaveIdempotenciaEmConflito(Exception):
+    pass
+
+
 def database_url() -> str:
     dsn = os.environ.get("BANKING_DATABASE_URL")
     if not dsn:
@@ -49,15 +57,33 @@ class PostgreSQLBank:
                 raise ContaNaoEncontrada
             return row[0]
 
-    def transferir(self, id: UUID, origem: str, destino: str, valor: int) -> None:
+    def transferir(
+        self, id: UUID, origem: str, destino: str, valor: int, chave: str | None = None
+    ) -> UUID:
         with psycopg.connect(self.dsn) as connection:
+            # Depois de obter os bloqueios, a consulta da chave deve ver o último commit.
+            connection.isolation_level = psycopg.IsolationLevel.READ_COMMITTED
             contas = dict(connection.execute(
                 "SELECT id, saldo_centavos FROM contas "
                 "WHERE id IN (%s, %s) ORDER BY id FOR UPDATE",
                 (origem, destino),
             ).fetchall())
+            if chave is not None:
+                anterior = connection.execute(
+                    "SELECT id, destino, valor_centavos FROM transferencias "
+                    "WHERE origem = %s AND chave_idempotencia = %s",
+                    (origem, chave),
+                ).fetchone()
+                if anterior is not None:
+                    id_original, destino_original, valor_original = anterior
+                    if (destino_original, valor_original) != (destino, valor):
+                        raise ChaveIdempotenciaEmConflito
+                    return id_original
+
             if origem not in contas or destino not in contas:
                 raise ContaNaoEncontrada
+            if origem == destino:
+                raise MesmaConta
             if valor > contas[origem]:
                 raise SaldoInsuficiente
 
@@ -70,10 +96,11 @@ class PostgreSQLBank:
                 (valor, destino),
             )
             connection.execute(
-                "INSERT INTO transferencias (id, origem, destino, valor_centavos) "
-                "VALUES (%s, %s, %s, %s)",
-                (id, origem, destino, valor),
+                "INSERT INTO transferencias (id, origem, destino, valor_centavos, chave_idempotencia) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (id, origem, destino, valor, chave),
             )
+            return id
 
 
 if __name__ == "__main__":

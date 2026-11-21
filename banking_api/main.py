@@ -5,13 +5,20 @@ from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 
-from banking_api.database import ContaNaoEncontrada, PostgreSQLBank, SaldoInsuficiente, database_url
+from banking_api.database import (
+    ChaveIdempotenciaEmConflito,
+    ContaNaoEncontrada,
+    MesmaConta,
+    PostgreSQLBank,
+    SaldoInsuficiente,
+    database_url,
+)
 
 
 class Conta(BaseModel):
@@ -102,27 +109,38 @@ def create_app() -> FastAPI:
         "/transferencias",
         status_code=201,
         responses=NAO_AUTENTICADO | CONTA_INDISPONIVEL | BANCO_INDISPONIVEL | {
-            409: {"model": Erro, "description": "Saldo insuficiente ou mesma conta"}
+            409: {"model": Erro, "description": "Saldo insuficiente, mesma conta ou chave em conflito"}
         },
         summary="Transferir saldo entre contas de laboratório",
     )
     def transferir(
         solicitacao: SolicitacaoTransferencia,
         conta: Annotated[str, Depends(conta_autenticada)],
+        chave: Annotated[
+            str | None,
+            Header(
+                alias="Idempotency-Key",
+                min_length=1,
+                max_length=128,
+                pattern=r"^[A-Za-z0-9._-]+$",
+                description="Chave opcional por conta de origem para recuperar o comprovante em reenvios.",
+            ),
+        ] = None,
     ) -> Transferencia:
         origem, destino, valor = solicitacao.origem, solicitacao.destino, solicitacao.valor_centavos
         if origem != conta:
             raise HTTPException(404, "conta_nao_encontrada")
-        if origem == destino:
-            raise HTTPException(409, "mesma_conta")
-
-        transferencia = Transferencia(
-            id=uuid4(), origem=origem, destino=destino, valor_centavos=valor
-        )
         try:
-            banco.transferir(transferencia.id, origem, destino, valor)
+            id_transferencia = banco.transferir(uuid4(), origem, destino, valor, chave)
         except SaldoInsuficiente as error:
             raise HTTPException(409, "saldo_insuficiente") from error
-        return transferencia
+        except MesmaConta as error:
+            raise HTTPException(409, "mesma_conta") from error
+        except ChaveIdempotenciaEmConflito as error:
+            raise HTTPException(409, "chave_idempotencia_em_conflito") from error
+
+        return Transferencia(
+            id=id_transferencia, origem=origem, destino=destino, valor_centavos=valor
+        )
 
     return app

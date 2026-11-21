@@ -11,8 +11,13 @@ class BankingApiClient:
     def consultar_conta(self, conta: str, token: str | None) -> Response:
         return self.client.get(f"/contas/{conta}", headers=self._headers(token))
 
-    def transferir(self, dados: dict, token: str | None) -> Response:
-        return self.client.post("/transferencias", json=dados, headers=self._headers(token))
+    def transferir(
+        self, dados: dict, token: str | None, chave: str | None = None
+    ) -> Response:
+        headers = self._headers(token)
+        if chave is not None:
+            headers["Idempotency-Key"] = chave
+        return self.client.post("/transferencias", json=dados, headers=headers)
 
     def consultar_openapi(self) -> Response:
         return self.client.get("/openapi.json")

@@ -144,3 +144,33 @@ Para rodar apenas esse BDD:
 
 Em 20/11/2026, 54 testes da API passaram localmente com PostgreSQL 18.7,
 incluindo os três cenários BDD e cinco verificações de migração e esquema.
+
+## Idempotência de transferências
+
+Em `POST /transferencias`, envie o cabeçalho opcional `Idempotency-Key`
+com 1 a 128 caracteres ASCII (letras, dígitos, ponto, hífen ou sublinhado).
+Gere uma chave por transferência e reutilize a mesma chave e os mesmos
+dados se a resposta se perder.
+
+| Requisição | Resultado |
+| --- | --- |
+| Chave inédita e transferência válida | `201`, com débito, crédito e comprovante persistidos na mesma transação |
+| Mesma conta de origem, chave, destino e valor | `201`, com o comprovante original e sem nova movimentação |
+| Mesma conta de origem e chave, com destino ou valor válido diferente | `409`, com `chave_idempotencia_em_conflito` e saldos preservados |
+| Cabeçalho inválido | `422` |
+| Sem cabeçalho | Cada requisição válida é processada como uma nova transferência |
+
+A migração `002_idempotencia.sql` persiste a chave na linha da transferência
+e garante sua unicidade por conta de origem. A autorização da origem é
+verificada em cada chamada. Rejeições não reservam a chave. A chave
+permanece vinculada ao comprovante e não tem expiração configurada.
+
+O BDD simula a perda da resposta na interface ASGI após a confirmação.
+O PostgreSQL é real e o teste consulta diretamente os dois saldos e o
+comprovante antes e depois do reenvio. O cenário de timeout HTTP por socket
+continua separado.
+
+```powershell
+& $python -m pytest banking_api/tests/test_idempotencia_bdd.py -v
+& $python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
+```
