@@ -174,3 +174,22 @@ continua separado.
 & $python -m pytest banking_api/tests/test_idempotencia_bdd.py -v
 & $python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
 ```
+
+## Concorrência de transferências
+
+Os cenários em `features/concorrencia.feature` enviam duas solicitações
+concorrentes de 6.000 centavos de uma conta com saldo de 10.000 centavos.
+Com a mesma chave, ambas recebem o mesmo comprovante. Com chaves
+distintas, uma recebe `201` e a outra recebe `409` por saldo insuficiente.
+O teste confere os dois saldos e um único registro de transferência
+diretamente no PostgreSQL, independentemente de qual chamada termine primeiro.
+
+Cada cenário usa um esquema isolado. Uma conexão de teste bloqueia a
+conta de origem e libera o bloqueio quando o PostgreSQL confirma que
+ambas as requisições estão aguardando. A consulta de bloqueios tem prazo
+limitado. As chamadas usam o TestClient dentro do processo e o banco é real.
+
+```powershell
+& $python -m pytest banking_api/tests/test_concorrencia_bdd.py -v
+& $python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
+```
