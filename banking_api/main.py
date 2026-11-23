@@ -19,6 +19,7 @@ from banking_api.database import (
     SaldoInsuficiente,
     database_url,
 )
+from banking_api.eventos import PublicadorTransferencias
 
 
 class Conta(BaseModel):
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="API bancária de laboratório", version="0.1.0")
     bearer = HTTPBearer(auto_error=False)
     banco = PostgreSQLBank(database_url())
+    publicador = PublicadorTransferencias.configurar()
 
     @app.exception_handler(psycopg.Error)
     async def falha_no_banco(request: Request, error: psycopg.Error) -> JSONResponse:
@@ -131,7 +133,8 @@ def create_app() -> FastAPI:
         if origem != conta:
             raise HTTPException(404, "conta_nao_encontrada")
         try:
-            id_transferencia = banco.transferir(uuid4(), origem, destino, valor, chave)
+            id_novo = uuid4()
+            id_transferencia = banco.transferir(id_novo, origem, destino, valor, chave)
         except SaldoInsuficiente as error:
             raise HTTPException(409, "saldo_insuficiente") from error
         except MesmaConta as error:
@@ -139,8 +142,11 @@ def create_app() -> FastAPI:
         except ChaveIdempotenciaEmConflito as error:
             raise HTTPException(409, "chave_idempotencia_em_conflito") from error
 
-        return Transferencia(
+        comprovante = Transferencia(
             id=id_transferencia, origem=origem, destino=destino, valor_centavos=valor
         )
+        if publicador is not None and id_transferencia == id_novo:
+            publicador.publicar(comprovante.model_dump(mode="json"))
+        return comprovante
 
     return app
