@@ -224,3 +224,26 @@ ignorados localmente. O GitHub Actions fornece PostgreSQL e Kafka reais.
 O Kafka e o PostgreSQL confirmam operações separadas. Se a publicação
 falhar depois do commit, a API mantém o comprovante e registra um aviso.
 A entrega confiável após falha depende de uma etapa posterior de resiliência.
+
+### Contrato, duplicidade, ordenação e releitura
+
+O JSON Schema `contratos/transferencia.confirmada.v1.json` especifica
+os campos obrigatórios, o UUID do comprovante, o valor em centavos e a
+moeda. O BDD valida o payload consumido do broker contra esse contrato.
+
+Em tópicos isolados com três partições, os testes verificam que o
+reenvio da mesma transferência preserva o comprovante e publica um
+único evento. Três transferências sequenciais da mesma conta chegam com
+a mesma chave, na mesma partição e com offsets crescentes. A ordem
+verificada vale para aquela partição e para publicações sequenciais.
+
+Uma segunda instância do consumidor pode reler a mensagem na mesma
+partição e no mesmo offset. O teste compara os bytes e verifica que
+a releitura preserva saldos e comprovante. Esse consumidor de teste só
+lê mensagens. O cenário demonstra replay por offset explícito. A
+deduplicação de efeitos em consumidores de negócio e a recuperação de
+publicações perdidas pertencem às etapas seguintes.
+
+```powershell
+& $python -m pytest banking_api/tests/test_eventos_kafka_bdd.py -v
+```

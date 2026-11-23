@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Transferência confirmada v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tipo", "transferencia_id", "valor_centavos", "moeda"],
+  "properties": {
+    "tipo": {"const": "transferencia.confirmada.v1"},
+    "transferencia_id": {"type": "string", "format": "uuid"},
+    "valor_centavos": {"type": "integer", "minimum": 1, "maximum": 1000000000},
+    "moeda": {"const": "BRL"}
+  }
+}
