@@ -2,3 +2,4 @@ fastapi==0.141.1
 pydantic==2.13.4
 uvicorn==0.52.1
 psycopg[binary]==3.2.13
+confluent-kafka==2.13.2

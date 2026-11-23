@@ -193,3 +193,34 @@ limitado. As chamadas usam o TestClient dentro do processo e o banco é real.
 & $python -m pytest banking_api/tests/test_concorrencia_bdd.py -v
 & $python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
 ```
+
+## Eventos de transferência no Kafka
+
+A API de laboratório publica `transferencia.confirmada.v1` depois do
+commit no PostgreSQL, quando `BANKING_KAFKA_BOOTSTRAP_SERVERS` está
+configurada. O tópico padrão é `banking.transferencias.v1` e pode ser
+substituído por `BANKING_KAFKA_TOPIC`. O tópico deve existir antes de
+usar a API. A chave da mensagem é a conta de origem. O JSON contém
+`tipo`, `transferencia_id`, `valor_centavos` e `moeda`.
+Uma rejeição ou um reenvio idempotente não publica um novo evento.
+
+O BDD usa um tópico temporário por cenário. Ele consome a mensagem de
+uma transferência aprovada e compara com o comprovante persistido.
+Para saldo insuficiente, verifica os offsets do tópico e a ausência
+de comprovante no banco.
+
+Com o PostgreSQL de teste configurado, execute na raiz:
+
+```powershell
+docker run --rm -d --name banking-kafka -p 127.0.0.1:9092:9092 apache/kafka:4.1.1
+$env:BANKING_TEST_KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
+& $python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
+docker stop banking-kafka
+```
+
+Sem a variável de Kafka de teste, os dois cenários de mensageria são
+ignorados localmente. O GitHub Actions fornece PostgreSQL e Kafka reais.
+
+O Kafka e o PostgreSQL confirmam operações separadas. Se a publicação
+falhar depois do commit, a API mantém o comprovante e registra um aviso.
+A entrega confiável após falha depende de uma etapa posterior de resiliência.

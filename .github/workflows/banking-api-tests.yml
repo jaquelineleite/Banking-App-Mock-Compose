@@ -14,6 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
+      kafka:
+        image: apache/kafka:4.1.1
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 8
       postgres:
         image: postgres:16
         env:
@@ -44,6 +53,7 @@ jobs:
       - name: Executar testes da API
         id: pytest
         env:
+          BANKING_TEST_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
           BANKING_TEST_DATABASE_URL: postgresql://banking:banking-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/banking_test
         run: python -m pytest banking_api/tests -q --junitxml=reports/banking-api-junit.xml
 
