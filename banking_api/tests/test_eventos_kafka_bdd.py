@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from threading import Event
@@ -15,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from banking_api.eventos import PublicadorTransferencias
 from banking_api.main import create_app
-from banking_api.outbox import despachar_lote
+from banking_api.outbox import consultar_estado, despachar_lote
 from banking_api.tests.api_client import BankingApiClient
 
 
@@ -197,7 +198,8 @@ def reler_evento(topico_kafka, postgres_dsn, resposta):
 
 
 @when("confirmo uma transferência com o broker inacessível", target_fixture="resposta")
-def confirmar_sem_broker(topico_kafka, postgres_dsn, tokens, monkeypatch):
+def confirmar_sem_broker(topico_kafka, postgres_dsn, tokens, monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="banking_api.outbox")
     # A API usa um endpoint inacessível. O consumidor continua ligado ao broker real.
     with monkeypatch.context() as ambiente:
         ambiente.setenv("BANKING_KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:1")
@@ -213,11 +215,15 @@ def estado_outbox(dsn):
 
 
 @then("a outbox mantém o evento pendente")
-def conferir_pendencia(topico_kafka, postgres_dsn, resposta):
+def conferir_pendencia(topico_kafka, postgres_dsn, resposta, caplog):
     assert resposta.status_code == 201
     consumidor, topico = topico_kafka
     assert estado_outbox(postgres_dsn) == [(UUID(resposta.json()["id"]), "pendente", 1, topico)]
     assert contar_eventos(consumidor, topico) == 0
+    metricas = consultar_estado(postgres_dsn)
+    assert metricas["pendente_mais_antigo_segundos"] >= 0
+    assert (metricas["pendentes"], metricas["publicados"], metricas["dlq"]) == (1, 0, 0)
+    conferir_logs(caplog, resposta, ["pendente"])
 
 
 @when("tento publicar novamente pelo broker disponível")
@@ -228,12 +234,16 @@ def recuperar_publicacao(postgres_dsn):
 
 
 @then("o evento recuperado corresponde ao comprovante e os saldos permanecem corretos")
-def conferir_recuperacao(topico_kafka, postgres_dsn, resposta):
+def conferir_recuperacao(topico_kafka, postgres_dsn, resposta, caplog):
     conferir_evento(topico_kafka, postgres_dsn, resposta)
     consumidor, topico = topico_kafka
     assert contar_eventos(consumidor, topico) == 1
     assert estado_outbox(postgres_dsn) == [(UUID(resposta.json()["id"]), "publicado", 2, topico)]
     conferir_saldos(postgres_dsn)
+    assert consultar_estado(postgres_dsn) == {
+        "pendentes": 0, "publicados": 1, "dlq": 0, "pendente_mais_antigo_segundos": None,
+    }
+    conferir_logs(caplog, resposta, ["pendente", "publicado"])
 
 
 @when("tento publicar mais duas vezes sem acesso ao broker")
@@ -246,11 +256,32 @@ def esgotar_tentativas(postgres_dsn, topico_kafka):
 
 
 @then("a outbox registra o evento na DLQ e os saldos permanecem corretos")
-def conferir_dlq(topico_kafka, postgres_dsn, resposta):
+def conferir_dlq(topico_kafka, postgres_dsn, resposta, caplog):
     consumidor, topico = topico_kafka
     assert estado_outbox(postgres_dsn) == [(UUID(resposta.json()["id"]), "dlq", 3, topico)]
     assert contar_eventos(consumidor, topico) == 0
     conferir_saldos(postgres_dsn)
+    assert consultar_estado(postgres_dsn) == {
+        "pendentes": 0, "publicados": 0, "dlq": 1, "pendente_mais_antigo_segundos": None,
+    }
+    conferir_logs(caplog, resposta, ["pendente", "pendente", "dlq"])
+
+
+def conferir_logs(caplog, resposta, estados):
+    registros = [
+        json.loads(registro.getMessage())
+        for registro in caplog.records
+        if registro.name == "banking_api.outbox"
+    ]
+    assert registros == [
+        {
+            "evento": "outbox.tentativa",
+            "transferencia_id": resposta.json()["id"],
+            "estado": estado,
+            "tentativas": tentativa,
+        }
+        for tentativa, estado in enumerate(estados, start=1)
+    ]
 
 
 def conferir_saldos(dsn):

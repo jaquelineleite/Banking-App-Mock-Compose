@@ -316,3 +316,22 @@ de laboratório. A suíte Android tem seu próprio processo de execução.
 O check pode ser selecionado como verificação obrigatória para a
 `master` em uma regra do GitHub. Essa proteção é configurada
 separadamente por quem administra o repositório.
+
+### Acompanhar a outbox
+
+A consulta abaixo lê apenas o PostgreSQL e imprime um JSON com totais de
+pendentes, publicados e DLQ, além da idade em segundos do pendente mais
+antigo. Quando não há pendentes, a idade vem como `null`.
+
+```powershell
+& $python -m banking_api.outbox --status
+```
+
+Os logs da outbox registram o ID do comprovante, o estado persistido e o
+número da tentativa. O mesmo ID aparece como `transferencia_id` no
+evento Kafka. O comando em lote mostra as transições no terminal. Para
+ver também as transições bem-sucedidas da API, habilite logs INFO:
+
+```powershell
+& $python -c "import logging, uvicorn; logging.basicConfig(level=logging.INFO); uvicorn.run('banking_api.main:create_app', factory=True, host='127.0.0.1', port=8000)"
+```
