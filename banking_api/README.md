@@ -274,3 +274,27 @@ ordenação de eventos recuperados ficam fora desta entrega.
 O BDD usa um endpoint de Kafka inacessível para provocar falha na API.
 Um consumidor conecta ao broker real e verifica a publicação recuperada,
 a ausência de mensagens após esgotar tentativas e a preservação dos saldos.
+
+## Performance da API HTTP
+
+O teste usa Uvicorn em uma porta local dinâmica, clientes HTTP com
+conexões reutilizadas e um esquema PostgreSQL isolado. A carga é de
+quatro clientes, com 20 requisições por cliente para cada operação.
+Primeiro mede a consulta de conta e depois a transferência de um
+centavo. O teste confere os saldos e os comprovantes após a carga.
+
+Com o PostgreSQL de teste configurado, execute na raiz:
+
+```powershell
+& $python -m pytest banking_api/tests/performance_api.py -q -s
+```
+
+O relatório `reports/banking-api-performance.json` registra p95 por
+requisição, requisições por segundo e percentual de respostas inesperadas
+ou falhas de transporte. A vazão inclui a abertura das conexões e a
+execução dos clientes. No CI, o artefato inclui também o JUnit.
+
+A carga mede API e PostgreSQL sem publicação no Kafka. Os números são
+uma referência de laboratório e variam conforme a máquina. A aprovação
+exige zero erros e integridade dos dados. Limites de latência e vazão
+podem ser definidos após observar várias execuções.

@@ -1,6 +1,8 @@
 import json
 import os
 from pathlib import Path
+from threading import Event
+from time import monotonic
 from uuid import UUID, uuid4
 
 import psycopg
@@ -62,6 +64,20 @@ def preparar_topico(monkeypatch, request):
         "enable.auto.commit": False,
     })
     request.addfinalizer(consumer.close)
+    prazo = monotonic() + 10
+    espera = Event()
+    while monotonic() < prazo:
+        metadados = consumer.list_topics(timeout=max(0.1, prazo - monotonic()))
+        dados = metadados.topics.get(topico)
+        if dados and dados.error is None and set(dados.partitions) == set(PARTICOES) and all(
+            particao.error is None and particao.leader >= 0
+            for particao in dados.partitions.values()
+        ):
+            break
+        espera.wait(0.1)
+    else:
+        pytest.fail(f"Partições do tópico {topico} sem líder dentro do prazo.")
+
     consumer.assign([TopicPartition(topico, particao, 0) for particao in PARTICOES])
     return consumer, topico
 

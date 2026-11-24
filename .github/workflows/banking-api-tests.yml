@@ -64,3 +64,19 @@ jobs:
           name: banking-api-junit
           path: reports/banking-api-junit.xml
           if-no-files-found: error
+
+      - name: Medir performance da API HTTP
+        id: performance
+        env:
+          BANKING_TEST_DATABASE_URL: postgresql://banking:banking-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/banking_test
+        run: python -m pytest banking_api/tests/performance_api.py -q -s --junitxml=reports/banking-api-performance.xml
+
+      - name: Publicar evidências de performance
+        if: ${{ !cancelled() && (steps.performance.outcome == 'success' || steps.performance.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: banking-api-performance
+          path: |
+            reports/banking-api-performance.json
+            reports/banking-api-performance.xml
+          if-no-files-found: error
