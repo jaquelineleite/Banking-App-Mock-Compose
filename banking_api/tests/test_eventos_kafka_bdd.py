@@ -9,6 +9,12 @@ from confluent_kafka import Consumer, TopicPartition
 from confluent_kafka.admin import AdminClient, NewTopic
 from jsonschema import Draft202012Validator, FormatChecker
 from pytest_bdd import given, parsers, scenarios, then, when
+from fastapi.testclient import TestClient
+
+from banking_api.eventos import PublicadorTransferencias
+from banking_api.main import create_app
+from banking_api.outbox import despachar_lote
+from banking_api.tests.api_client import BankingApiClient
 
 
 scenarios("features/eventos_kafka.feature")
@@ -172,3 +178,68 @@ def reler_evento(topico_kafka, postgres_dsn, resposta):
         assert banco.execute("SELECT id FROM transferencias").fetchall() == [
             (UUID(resposta.json()["id"]),)
         ]
+
+
+@when("confirmo uma transferência com o broker inacessível", target_fixture="resposta")
+def confirmar_sem_broker(topico_kafka, postgres_dsn, tokens, monkeypatch):
+    # A API usa um endpoint inacessível. O consumidor continua ligado ao broker real.
+    with monkeypatch.context() as ambiente:
+        ambiente.setenv("BANKING_KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:1")
+        with TestClient(create_app()) as cliente:
+            return solicitar(BankingApiClient(cliente), tokens, 250)
+
+
+def estado_outbox(dsn):
+    with psycopg.connect(dsn) as banco:
+        return banco.execute(
+            "SELECT transferencia_id, estado, tentativas, topico FROM outbox_transferencias"
+        ).fetchall()
+
+
+@then("a outbox mantém o evento pendente")
+def conferir_pendencia(topico_kafka, postgres_dsn, resposta):
+    assert resposta.status_code == 201
+    consumidor, topico = topico_kafka
+    assert estado_outbox(postgres_dsn) == [(UUID(resposta.json()["id"]), "pendente", 1, topico)]
+    assert contar_eventos(consumidor, topico) == 0
+
+
+@when("tento publicar novamente pelo broker disponível")
+def recuperar_publicacao(postgres_dsn):
+    publicador = PublicadorTransferencias.configurar()
+    assert despachar_lote(postgres_dsn, publicador) == 1
+    assert despachar_lote(postgres_dsn, publicador) == 0
+
+
+@then("o evento recuperado corresponde ao comprovante e os saldos permanecem corretos")
+def conferir_recuperacao(topico_kafka, postgres_dsn, resposta):
+    conferir_evento(topico_kafka, postgres_dsn, resposta)
+    consumidor, topico = topico_kafka
+    assert contar_eventos(consumidor, topico) == 1
+    assert estado_outbox(postgres_dsn) == [(UUID(resposta.json()["id"]), "publicado", 2, topico)]
+    conferir_saldos(postgres_dsn)
+
+
+@when("tento publicar mais duas vezes sem acesso ao broker")
+def esgotar_tentativas(postgres_dsn, topico_kafka):
+    _, topico = topico_kafka
+    publicador = PublicadorTransferencias("127.0.0.1:1", topico)
+    assert despachar_lote(postgres_dsn, publicador) == 1
+    assert despachar_lote(postgres_dsn, publicador) == 1
+    assert despachar_lote(postgres_dsn, publicador) == 0
+
+
+@then("a outbox registra o evento na DLQ e os saldos permanecem corretos")
+def conferir_dlq(topico_kafka, postgres_dsn, resposta):
+    consumidor, topico = topico_kafka
+    assert estado_outbox(postgres_dsn) == [(UUID(resposta.json()["id"]), "dlq", 3, topico)]
+    assert contar_eventos(consumidor, topico) == 0
+    conferir_saldos(postgres_dsn)
+
+
+def conferir_saldos(dsn):
+    with psycopg.connect(dsn) as banco:
+        assert dict(banco.execute("SELECT id, saldo_centavos FROM contas")) == {
+            "conta-a": 9750,
+            "conta-b": 5250,
+        }

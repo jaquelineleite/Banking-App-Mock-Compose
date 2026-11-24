@@ -27,7 +27,7 @@ class PublicadorTransferencias:
             return cls(servidores, os.environ.get("BANKING_KAFKA_TOPIC", "banking.transferencias.v1"))
         return None
 
-    def publicar(self, comprovante: dict) -> None:
+    def publicar(self, comprovante: dict, *, topico: str) -> bool:
         entregue = Event()
         confirmado = Event()
 
@@ -38,7 +38,7 @@ class PublicadorTransferencias:
 
         try:
             self.produtor.produce(
-                self.topico,
+                topico,
                 key=comprovante["origem"],
                 value=json.dumps({
                     "tipo": "transferencia.confirmada.v1",
@@ -55,3 +55,5 @@ class PublicadorTransferencias:
                 logger.warning("Publicação do evento de transferência não confirmada pelo Kafka")
         except (KafkaException, BufferError):
             logger.warning("Falha ao publicar evento de transferência no Kafka")
+
+        return confirmado.is_set()

@@ -223,7 +223,7 @@ ignorados localmente. O GitHub Actions fornece PostgreSQL e Kafka reais.
 
 O Kafka e o PostgreSQL confirmam operações separadas. Se a publicação
 falhar depois do commit, a API mantém o comprovante e registra um aviso.
-A entrega confiável após falha depende de uma etapa posterior de resiliência.
+A recuperação usa a outbox descrita abaixo.
 
 ### Contrato, duplicidade, ordenação e releitura
 
@@ -242,8 +242,35 @@ partição e no mesmo offset. O teste compara os bytes e verifica que
 a releitura preserva saldos e comprovante. Esse consumidor de teste só
 lê mensagens. O cenário demonstra replay por offset explícito. A
 deduplicação de efeitos em consumidores de negócio e a recuperação de
-publicações perdidas pertencem às etapas seguintes.
+publicações perdidas são comportamentos distintos da releitura.
 
 ```powershell
 & $python -m pytest banking_api/tests/test_eventos_kafka_bdd.py -v
 ```
+
+### Recuperação de publicação com Transactional Outbox
+
+Com Kafka habilitado, a transferência grava a intenção de publicação na
+`outbox_transferencias`, na mesma transação PostgreSQL que grava o
+comprovante e altera os saldos. A API tenta publicar uma vez após o
+commit e mantém o comprovante se a entrega falhar. O reenvio idempotente
+da transferência não gera outro registro na outbox.
+
+Para processar até 10 registros pendentes por execução, use a mesma
+configuração de PostgreSQL e Kafka da API:
+
+```powershell
+& $python -m banking_api.outbox
+```
+
+Cada execução tenta entregar cada registro selecionado uma vez. A terceira
+falha confirmada no banco move o registro para o estado `dlq`, uma fila
+de falhas persistida no PostgreSQL. A execução em lote pode ser chamada
+por um agendador externo. A entrega pode ser repetida. Se o Kafka confirmar e o commit da outbox falhar,
+a mensagem pode ser publicada novamente. Consumidores podem deduplicar
+pelo identificador do comprovante. O replay administrativo da DLQ e a
+ordenação de eventos recuperados ficam fora desta entrega.
+
+O BDD usa um endpoint de Kafka inacessível para provocar falha na API.
+Um consumidor conecta ao broker real e verifica a publicação recuperada,
+a ausência de mensagens após esgotar tentativas e a preservação dos saldos.

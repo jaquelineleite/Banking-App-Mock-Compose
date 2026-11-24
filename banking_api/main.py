@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from hmac import compare_digest
@@ -20,6 +21,7 @@ from banking_api.database import (
     database_url,
 )
 from banking_api.eventos import PublicadorTransferencias
+from banking_api.outbox import despachar_lote
 
 
 class Conta(BaseModel):
@@ -134,7 +136,10 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "conta_nao_encontrada")
         try:
             id_novo = uuid4()
-            id_transferencia = banco.transferir(id_novo, origem, destino, valor, chave)
+            id_transferencia = banco.transferir(
+                id_novo, origem, destino, valor, chave,
+                topico=publicador.topico if publicador is not None else None,
+            )
         except SaldoInsuficiente as error:
             raise HTTPException(409, "saldo_insuficiente") from error
         except MesmaConta as error:
@@ -146,7 +151,12 @@ def create_app() -> FastAPI:
             id=id_transferencia, origem=origem, destino=destino, valor_centavos=valor
         )
         if publicador is not None and id_transferencia == id_novo:
-            publicador.publicar(comprovante.model_dump(mode="json"))
+            try:
+                despachar_lote(banco.dsn, publicador, transferencia_id=id_transferencia)
+            except psycopg.Error:
+                logging.getLogger(__name__).warning(
+                    "Falha ao atualizar a outbox da transferência %s", id_transferencia
+                )
         return comprovante
 
     return app
