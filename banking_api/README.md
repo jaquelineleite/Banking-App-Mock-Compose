@@ -298,3 +298,21 @@ A carga mede API e PostgreSQL sem publicação no Kafka. Os números são
 uma referência de laboratório e variam conforme a máquina. A aprovação
 exige zero erros e integridade dos dados. Limites de latência e vazão
 podem ser definidos após observar várias execuções.
+
+## Quality Gate da API
+
+O check **Quality Gate da API** consolida o resultado da regressão com
+PostgreSQL e Kafka reais, do teste HTTP de performance e da publicação dos
+artefatos. Os dois relatórios JUnit devem existir e registrar pelo menos
+um teste cada, com zero falhas, erros ou testes ignorados. A página da
+execução mostra os totais de cada relatório e preserva as evidências
+geradas mesmo quando um teste falha. A performance roda mesmo quando a
+regressão falha, desde que a instalação tenha concluído.
+
+O teste de performance exige as respostas esperadas e consistência dos
+saldos e comprovantes. Latência e vazão ficam registradas como referência
+de laboratório. A suíte Android tem seu próprio processo de execução.
+
+O check pode ser selecionado como verificação obrigatória para a
+`master` em uma regra do GitHub. Essa proteção é configurada
+separadamente por quem administra o repositório.

@@ -48,6 +48,7 @@ jobs:
             banking_api/requirements-test.txt
 
       - name: Instalar dependências
+        id: dependencias
         run: python -m pip install -r banking_api/requirements-test.txt
 
       - name: Executar testes da API
@@ -66,6 +67,7 @@ jobs:
           if-no-files-found: error
 
       - name: Medir performance da API HTTP
+        if: ${{ !cancelled() && steps.dependencias.outcome == 'success' }}
         id: performance
         env:
           BANKING_TEST_DATABASE_URL: postgresql://banking:banking-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/banking_test
@@ -80,3 +82,25 @@ jobs:
             reports/banking-api-performance.json
             reports/banking-api-performance.xml
           if-no-files-found: error
+
+      - name: Validar as evidências e resumir o JUnit
+        if: ${{ !cancelled() && steps.dependencias.outcome == 'success' }}
+        run: |
+          python .github/scripts/validar_junit.py reports/banking-api-junit.xml reports/banking-api-performance.xml
+          test -s reports/banking-api-performance.json
+
+  quality-gate:
+    name: Quality Gate da API
+    needs: api-tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Conferir resultado da validação
+        env:
+          RESULTADO: ${{ needs.api-tests.result }}
+        run: |
+          if [ "$RESULTADO" != "success" ]; then
+            echo "::error::Validação da API bancária terminou com status $RESULTADO."
+            exit 1
+          fi
