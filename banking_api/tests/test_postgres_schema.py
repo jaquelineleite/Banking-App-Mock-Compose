@@ -23,7 +23,7 @@ def test_reaplicar_migracao_e_recriar_app_preserva_saldos(api, tokens, postgres_
         ).json()["saldo_centavos"] == 5250
 
     with psycopg.connect(postgres_dsn) as connection:
-        assert connection.execute("SELECT count(*) FROM schema_migrations").fetchone() == (2,)
+        assert connection.execute("SELECT count(*) FROM schema_migrations").fetchone() == (3,)
         assert connection.execute("SELECT count(*) FROM transferencias").fetchone() == (1,)
 
 

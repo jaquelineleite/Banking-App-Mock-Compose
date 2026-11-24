@@ -58,7 +58,8 @@ class PostgreSQLBank:
             return row[0]
 
     def transferir(
-        self, id: UUID, origem: str, destino: str, valor: int, chave: str | None = None
+        self, id: UUID, origem: str, destino: str, valor: int, chave: str | None = None,
+        *, topico: str | None = None,
     ) -> UUID:
         with psycopg.connect(self.dsn) as connection:
             # Depois de obter os bloqueios, a consulta da chave deve ver o último commit.
@@ -100,6 +101,11 @@ class PostgreSQLBank:
                 "VALUES (%s, %s, %s, %s, %s)",
                 (id, origem, destino, valor, chave),
             )
+            if topico is not None:
+                connection.execute(
+                    "INSERT INTO outbox_transferencias (transferencia_id, topico) VALUES (%s, %s)",
+                    (id, topico),
+                )
             return id
 
 
