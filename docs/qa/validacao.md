@@ -11,8 +11,19 @@ pytest 8.4.2 e pytest-html 4.1.1.
 | `python -m compileall -q qa_mobile/config.py qa_mobile/pages qa_mobile/tests qa_mobile/unit` | Código Python compilado sem erros. |
 | `python -m pip check` | Nenhum requisito quebrado. |
 | `git diff --cached --check` | Diff sem erros de whitespace. |
-| `curl -fsS --max-time 3 http://127.0.0.1:4723/status` | Conexão recusada. |
+| `curl -fsS --max-time 3 http://127.0.0.1:4723/status` | Conexão recusada neste ambiente de auditoria. |
 
 A verificação unitária cobre defaults, valores sobrescritos e independência
-de objetos de configuração. A execução mobile aguarda o Android e Appium
-descritos no [guia do Windows](../../qa_mobile/README.md).
+de objetos de configuração. A falha de conexão acima descreve apenas este
+ambiente Linux; ela não invalida a execução local posterior registrada abaixo.
+
+## Execução local em Android — 26/11/2026
+
+| Suíte | Resultado observado |
+| --- | --- |
+| `qa_mobile/tests` com Appium | 3 aprovados em 82,63 s em Android 15: saldo visível no Dashboard, abertura do Histórico e retorno à Home. |
+
+Essa execução valida as três jornadas de navegação e a presença dos elementos
+consultados. Ela não confirma o valor numérico do saldo nem que os filtros
+retornam as transações corretas. O commit e a versão do APK não foram anotados
+junto ao resultado. Para reproduzir a suíte, consulte o [guia do Appium](../../qa_mobile/README.md).

@@ -1,6 +1,8 @@
 # Estratégia de Quality Engineering
 
-## Auditoria da baseline
+> **Nota de atualização — 26/11/2026:** esta página preserva a auditoria da baseline e o plano da etapa inicial. Depois desse retrato, o repositório recebeu o laboratório de API/PostgreSQL, cenários de idempotência e concorrência, Kafka/outbox, performance e CI. Consulte o [README](../../README.md), a [auditoria final](auditoria-final.md), a [matriz](matriz.md) e o [registro de validação mobile](validacao.md) para o estado e as evidências mais recentes. As estimativas abaixo são históricas e não representam o backlog atual.
+
+## Auditoria histórica da baseline
 
 Fork `jaquelineleite/Banking-App-Mock-Compose`, branch `master`, commit
 `6e96757ae76a17cababc0ad9803721b7ddaa27f0`. Os PRs #1 (smoke Appium)
@@ -88,10 +90,11 @@ defaults históricos, selecionar o emulador pelo UDID e ser verificável sem
 Appium. As três jornadas precisam executar no Windows para validar a
 navegação e os seletores em runtime antes de aprovar a revisão mobile.
 
-## Estimativas restantes
+## Plano e estimativas da etapa inicial (histórico)
 
-Horas de trabalho após este PR. As fases de infraestrutura supõem um
-ambiente com Docker e uma imagem Android disponíveis.
+As estimativas a seguir foram feitas após o PR #3, quando API, PostgreSQL,
+Kafka, performance e CI ainda estavam planejados. Elas documentam o plano
+original e não representam o trabalho restante hoje.
 
 | PR planejado | Entrega e dependência | Horas restantes |
 | --- | --- | --- |

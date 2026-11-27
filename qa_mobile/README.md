@@ -63,10 +63,12 @@ Appium, UiAutomator2, API do Android, locale e resultado. Os arquivos em
 [Auditoria e estratégia](../docs/qa/estrategia.md) · [Matriz de rastreabilidade](../docs/qa/matriz.md)
 
 
-## Validação da preparação dos testes
+## Validação inicial da preparação dos testes
 
 Em 18/11/2026, `python -m pytest qa_mobile/unit -q` aprovou 8 casos e
 `python -m pytest qa_mobile/tests --collect-only -q` coletou os 3 cenários
-Appium. A execução em Android segue pendente. Neste ambiente, não havia
-ADB no PATH, o emulador anterior não estava disponível e a porta local
-4723 recusou a conexão.
+Appium. Naquele ambiente, não havia ADB no PATH, o emulador não estava
+disponível e a porta local 4723 recusou a conexão. A execução posterior em
+Android está registrada acima. O commit e a versão do APK dessa execução
+precisam ser capturados em uma próxima evidência para permitir reprodução
+exata.
